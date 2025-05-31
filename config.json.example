@@ -1,0 +1,9 @@
+{
+    "src_dir": "/path/to/your/source/directory",
+    "bunny_storage_url": "https://region.storage.bunnycdn.com/your-storage-zone",
+    "bunny_api_key": "your-bunny-api-key-here",
+    "cache_dir": "~/.bunny_cache",
+    "excluded_files": [".DS_Store", "._.DS_Store", "Thumbs.db", ".AppleDouble"],
+    "fast_checksum": true,
+    "parallel_analysis": true
+} 
