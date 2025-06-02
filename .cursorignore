@@ -1,0 +1,28 @@
+# Hide sensitive configuration files
+config.json
+*.env
+.env*
+
+# Allow example config files to be indexed
+!config.json.example
+!*.env.example
+
+# Hide cache and temporary files
+.bunny_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Hide OS files
+.DS_Store
+._.DS_Store
+Thumbs.db
+
+# Hide IDE files
+.vscode/
+.idea/
+*.swp
+*.swo 
