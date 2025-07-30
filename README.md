@@ -15,7 +15,8 @@ A Python tool for syncing files from a local directory to Bunny.net CDN storage 
 - **Performance Optimized**: Fast checksums and parallel processing for large file collections
 - **Smart Caching**: Metadata-based cache to avoid unnecessary checksum calculations
 - **Cleanup**: Automatically removes deleted files and empty directories
-- **Safe Operations**: Confirmation prompts before making changes
+- **Safe Operations**: Confirmation prompts before making changes (can be skipped with `-y`)
+- **Dry Run Mode**: Preview changes without making them using `--dry-run`
 - **Flexible Configuration**: JSON config file with command-line overrides
 
 ## Configuration
@@ -107,6 +108,17 @@ python bunnyhop.py --config /path/to/config.json
 # Override config file settings
 python bunnyhop.py --src-dir /different/path --api-key new-key
 
+# Skip confirmation prompt (useful for automated scripts)
+python bunnyhop.py -y
+# or
+python bunnyhop.py --yes
+
+# Show what would be done without making changes
+python bunnyhop.py --dry-run
+
+# Combine options
+python bunnyhop.py -y --dry-run
+
 # Show help
 python bunnyhop.py --help
 ```
@@ -163,7 +175,7 @@ pip install -r requirements.txt
 
 ## Version Management
 
-This project uses semantic versioning. Current version: 1.0.0
+This project uses semantic versioning. Current version: 1.0.2
 
 To update versions:
 - Bug fixes: "bump patch version"

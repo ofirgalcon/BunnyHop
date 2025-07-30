@@ -4,7 +4,7 @@ BunnyHop - Bunny.net storage zone sync tool
 Syncs files from a local directory to Bunny.net CDN storage
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 import os
 import sys
@@ -930,13 +930,22 @@ class BunnyStorageSync:
         
         return response.lower() in ('y', 'yes')
     
-    def sync_files(self):
+    def sync_files(self, skip_confirmation: bool = False, dry_run: bool = False):
         """Main sync function."""
         self.print_msg(f"=== BunnyHop v{__version__} ===", Colors.BOLD)
         self.print_msg(f"Source: {self.config.src_dir}", Colors.BLUE)
         self.print_msg(f"Destination: {self.config.bunny_storage_url}", Colors.BLUE)
         # self.print_msg(f"Excluded files: {', '.join(self.config.excluded_files)}", Colors.BLUE)
         self.print_msg(f"Upload chunk size: 256 KB", Colors.BLUE)
+        
+        # Show option status early
+        if dry_run:
+            self.print_msg("DRY RUN MODE - No changes will be made", Colors.YELLOW)
+        if skip_confirmation:
+            self.print_msg("AUTO-CONFIRM MODE - Skipping confirmation prompt", Colors.YELLOW)
+        if dry_run and skip_confirmation:
+            self.print_msg("DRY RUN + AUTO-CONFIRM - Previewing changes without confirmation", Colors.YELLOW)
+        
         print()
         
         # Get local and remote files
@@ -948,8 +957,12 @@ class BunnyStorageSync:
         files_to_upload, files_to_delete, upload_size = self.analyze_changes(local_files, remote_files)
         print()
         
-        # Ask for confirmation
-        if not self.confirm_changes(files_to_upload, files_to_delete, upload_size):
+        # Ask for confirmation (unless skipped)
+        if dry_run:
+            self.print_msg("DRY RUN - Would proceed with changes (skipping confirmation)", Colors.YELLOW)
+        elif skip_confirmation:
+            self.print_msg("Proceeding with changes (auto-confirm mode)", Colors.YELLOW)
+        elif not self.confirm_changes(files_to_upload, files_to_delete, upload_size):
             return
         
         # Record start time for sync operations *after* confirmation
@@ -986,36 +999,51 @@ class BunnyStorageSync:
                 for file_index, relative_path in enumerate(validated_files):
                     full_path = local_files[relative_path]
                     
-                    success = self.upload_file(full_path, relative_path, file_index, total_files_to_upload, total_upload_size)
-                    
-                    if success:
-                        # Update cache with new checksum and metadata
-                        if self.config.fast_checksum:
-                            checksum = self.get_file_checksum_fast(full_path)
-                        else:
-                            checksum = self.get_file_checksum(full_path)
+                    if dry_run:
+                        self.print_msg(f"DRY RUN - Would upload: {relative_path} ({self.format_size(os.path.getsize(full_path))})", Colors.BLUE)
+                        self.stats.files_uploaded += 1
+                        self.stats.total_bytes_uploaded += os.path.getsize(full_path)
+                    else:
+                        success = self.upload_file(full_path, relative_path, file_index, total_files_to_upload, total_upload_size)
                         
-                        if checksum is not None:
-                            self.save_metadata_to_cache(relative_path, full_path, checksum)
+                        if success:
+                            # Update cache with new checksum and metadata
+                            if self.config.fast_checksum:
+                                checksum = self.get_file_checksum_fast(full_path)
+                            else:
+                                checksum = self.get_file_checksum(full_path)
+                            
+                            if checksum is not None:
+                                self.save_metadata_to_cache(relative_path, full_path, checksum)
         
         # Delete remote files
         if files_to_delete:
             print()
-            self.print_msg("Removing remote files...")
+            if dry_run:
+                self.print_msg("DRY RUN - Would remove remote files...")
+            else:
+                self.print_msg("Removing remote files...")
             for relative_path in files_to_delete:
-                success = self.delete_remote_file(relative_path)
-                if success:
-                    self.remove_from_cache(relative_path)
-                    # Remove from remote_files set so we can identify empty directories
-                    remote_files.discard(relative_path)
+                if dry_run:
+                    self.print_msg(f"DRY RUN - Would delete: {relative_path}", Colors.BLUE)
+                    self.stats.files_deleted += 1
+                else:
+                    success = self.delete_remote_file(relative_path)
+                    if success:
+                        self.remove_from_cache(relative_path)
+                        # Remove from remote_files set so we can identify empty directories
+                        remote_files.discard(relative_path)
         
         # Clean up empty directories
-        self.cleanup_empty_directories(remote_directories, remote_files)
+        if not dry_run:
+            self.cleanup_empty_directories(remote_directories, remote_files)
+        elif files_to_delete:  # Only show dry-run message if there were files to delete
+            self.print_msg("DRY RUN - Would clean up empty directories", Colors.BLUE)
         
         # Print summary
-        self.print_summary()
+        self.print_summary(dry_run=dry_run)
     
-    def print_summary(self):
+    def print_summary(self, dry_run: bool = False):
         """Print sync summary."""
         end_time = time.time()
         
@@ -1056,7 +1084,10 @@ class BunnyStorageSync:
         self.print_msg(f"Total size uploaded: {self.format_size(self.stats.total_bytes_uploaded)}", Colors.BLUE)
         self.print_msg(f"Average upload speed: {avg_speed}", Colors.BLUE)
         self.print_msg(f"Total sync time: {duration_str}", Colors.BLUE)
-        self.print_msg("Sync complete!", Colors.BOLD)
+        if dry_run:
+            self.print_msg("DRY RUN complete!", Colors.BOLD)
+        else:
+            self.print_msg("Sync complete!", Colors.BOLD)
         print()
         self.print_msg(f"=== End of BunnyHop v{__version__} ===", Colors.BOLD)
 
@@ -1069,6 +1100,7 @@ def main():
     parser.add_argument('--storage-url', help='Bunny.net storage URL (overrides config file)')
     parser.add_argument('--cache-dir', help='Cache directory for checksums (overrides config file)')
     parser.add_argument('--dry-run', action='store_true', help='Show what would be done without making changes')
+    parser.add_argument('-y', '--yes', action='store_true', help='Skip confirmation prompt and proceed automatically')
     
     args = parser.parse_args()
     
@@ -1090,10 +1122,16 @@ def main():
     if args.cache_dir:
         config.cache_dir = args.cache_dir
     
+    # Store yes flag for use in sync
+    skip_confirmation = args.yes
+    
+    # Store dry-run flag for use in sync
+    dry_run = args.dry_run
+    
     # Create and run sync
     try:
         sync = BunnyStorageSync(config)
-        sync.sync_files()
+        sync.sync_files(skip_confirmation=skip_confirmation, dry_run=dry_run)
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}Sync cancelled by user.{Colors.NC}")
         sys.exit(1)
